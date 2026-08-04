@@ -9,4 +9,5 @@ export const gameComponents: Record<string, ComponentType> = {
   "eternal-roulette": dynamic(() => import("./eternal-roulette/Game")),
   "untouchable-pinball": dynamic(() => import("./untouchable-pinball/Game")),
   "unmatchable-memory": dynamic(() => import("./unmatchable-memory/Game")),
+  "late-rps": dynamic(() => import("./late-rps/Game")),
 };

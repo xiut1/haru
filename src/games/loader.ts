@@ -11,4 +11,5 @@ export const gameComponents: Record<string, ComponentType> = {
   "unmatchable-memory": dynamic(() => import("./unmatchable-memory/Game")),
   "late-rps": dynamic(() => import("./late-rps/Game")),
   "no-tetris": dynamic(() => import("./no-tetris/Game")),
+  "all-mines": dynamic(() => import("./all-mines/Game")),
 };

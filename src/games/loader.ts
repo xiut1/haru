@@ -12,4 +12,5 @@ export const gameComponents: Record<string, ComponentType> = {
   "late-rps": dynamic(() => import("./late-rps/Game")),
   "no-tetris": dynamic(() => import("./no-tetris/Game")),
   "all-mines": dynamic(() => import("./all-mines/Game")),
+  "tiny-gomoku": dynamic(() => import("./tiny-gomoku/Game")),
 };

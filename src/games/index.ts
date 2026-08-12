@@ -8,6 +8,7 @@ import { meta as day005 } from "./no-tetris/meta";
 import { meta as day006 } from "./all-mines/meta";
 import { meta as day007 } from "./tiny-gomoku/meta";
 import { meta as day008 } from "./only-o/meta";
+import { meta as day009 } from "./press-once/meta";
 
 /** 새 게임을 만들면 여기에 meta 하나만 추가하면 된다. */
 const all: GameMeta[] = [
@@ -19,6 +20,7 @@ const all: GameMeta[] = [
   day006,
   day007,
   day008,
+  day009,
 ];
 
 /** 최신순 */

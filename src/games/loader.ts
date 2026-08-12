@@ -14,4 +14,5 @@ export const gameComponents: Record<string, ComponentType> = {
   "all-mines": dynamic(() => import("./all-mines/Game")),
   "tiny-gomoku": dynamic(() => import("./tiny-gomoku/Game")),
   "only-o": dynamic(() => import("./only-o/Game")),
+  "press-once": dynamic(() => import("./press-once/Game")),
 };

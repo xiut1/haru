@@ -15,4 +15,5 @@ export const gameComponents: Record<string, ComponentType> = {
   "tiny-gomoku": dynamic(() => import("./tiny-gomoku/Game")),
   "only-o": dynamic(() => import("./only-o/Game")),
   "press-once": dynamic(() => import("./press-once/Game")),
+  "loading-only": dynamic(() => import("./loading-only/Game")),
 };

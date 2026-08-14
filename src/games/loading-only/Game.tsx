@@ -201,6 +201,48 @@ function seconds(ms: number): string {
   return (ms / 1000).toFixed(1);
 }
 
+/**
+ * 키 아트. div와 그라데이션으로 그린 노을 진 폐허다.
+ * 마우스를 얹으면 층마다 다르게 밀려서 시차가 생긴다.
+ *
+ * 좌표는 전부 상수다. 렌더 중에 난수를 쓰면 서버가 그린 것과
+ * 브라우저가 그린 것이 달라진다.
+ */
+const STARS = [
+  { left: 8, top: 9, size: 2, delay: 0 },
+  { left: 19, top: 22, size: 1, delay: 700 },
+  { left: 31, top: 6, size: 2, delay: 1500 },
+  { left: 44, top: 17, size: 1, delay: 400 },
+  { left: 57, top: 8, size: 2, delay: 2100 },
+  { left: 68, top: 20, size: 1, delay: 1100 },
+  { left: 79, top: 11, size: 2, delay: 1800 },
+  { left: 90, top: 24, size: 1, delay: 300 },
+  { left: 96, top: 7, size: 2, delay: 2400 },
+];
+
+/**
+ * 폐허의 탑들. 지평선(아래에서 38%) 위에 선다.
+ * 높이가 들쭉날쭉하고 위가 깨져 있어야 폐허로 보인다.
+ */
+const TOWERS = [
+  { left: 49, width: 3, height: 13, round: "rounded-t-sm" },
+  { left: 53, width: 6.5, height: 31, round: "rounded-t-[45%]" },
+  { left: 60.5, width: 2.5, height: 9, round: "" },
+  { left: 64, width: 5, height: 23, round: "rounded-t-[40%]" },
+  { left: 70, width: 3, height: 15, round: "rounded-t-sm" },
+  { left: 74, width: 2, height: 7, round: "" },
+];
+
+/** 떠다니는 빛. 정원 쪽에 몰려 있다 */
+const MOTES = [
+  { left: 14, top: 68, delay: 0, ms: 2600 },
+  { left: 23, top: 78, delay: 600, ms: 3400 },
+  { left: 33, top: 62, delay: 1200, ms: 2200 },
+  { left: 41, top: 82, delay: 300, ms: 3000 },
+  { left: 63, top: 72, delay: 1500, ms: 2800 },
+  { left: 84, top: 66, delay: 900, ms: 3600 },
+];
+
 /** 다시 로딩할수록 길어진다. 서비스입니다. */
 function scaleFor(run: number): number {
   return Math.min(1 + (run - 1) * 0.35, 2.4);
@@ -214,6 +256,8 @@ export default function Game() {
   const [skips, setSkips] = useState(0);
   const [waitedMs, setWaitedMs] = useState(0);
   const [epilogue, setEpilogue] = useState(false);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const [settled, setSettled] = useState(false);
 
   const frame = useRef<number | null>(null);
   const logBox = useRef<HTMLDivElement | null>(null);
@@ -249,6 +293,13 @@ export default function Game() {
       if (frame.current !== null) cancelAnimationFrame(frame.current);
     };
   }, [stage, total]);
+
+  // 키 아트는 아주 천천히 줌아웃한다. 24초 걸린다. 로딩보다 짧다.
+  useEffect(() => {
+    if (stage !== "intro") return;
+    const id = requestAnimationFrame(() => setSettled(true));
+    return () => cancelAnimationFrame(id);
+  }, [stage]);
 
   // 다 끝난 뒤에 본편을 보여드려야 하는데, 없어서 한 박자만 쉰다.
   useEffect(() => {
@@ -296,19 +347,162 @@ export default function Game() {
   }
 
   if (stage === "intro") {
+    /** 층마다 다르게 밀린다. depth가 클수록 앞쪽 */
+    const shift = (depth: number) => ({
+      transform: `translate3d(${(-tilt.x * depth).toFixed(2)}px, ${(
+        -tilt.y *
+        depth *
+        0.5
+      ).toFixed(2)}px, 0)`,
+    });
+
     return (
       <div className="flex min-h-[420px] flex-col items-center gap-8">
         <div className="w-full max-w-xl overflow-hidden rounded-xl border border-foreground/15">
-          <div className="bg-gradient-to-b from-indigo-500/25 via-purple-500/10 to-transparent px-6 py-10 text-center">
-            <p className="font-mono text-[11px] tracking-[0.3em] opacity-50">
-              HARU ENGINE 4.2
-            </p>
-            <h2 className="mt-3 text-2xl font-bold leading-tight sm:text-3xl">
-              몰락한 왕국의
-              <br />
-              마지막 정원사
-            </h2>
-            <p className="mt-3 text-sm opacity-70">오픈월드 액션 RPG</p>
+          {/* 키 아트. 실제 게임 화면은 아닙니다. 실제 게임 화면은 없습니다. */}
+          <div
+            onPointerMove={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setTilt({
+                x: ((e.clientX - r.left) / r.width - 0.5) * 2,
+                y: ((e.clientY - r.top) / r.height - 0.5) * 2,
+              });
+            }}
+            onPointerLeave={() => setTilt({ x: 0, y: 0 })}
+            className="relative aspect-[4/3] w-full select-none overflow-hidden bg-indigo-950 sm:aspect-[16/10]"
+          >
+            <div
+              className={`absolute -inset-4 transition-transform ease-out duration-[24000ms] ${
+                settled ? "scale-100" : "scale-110"
+              }`}
+            >
+              {/* 하늘. 지평선은 아래에서 38% 지점이고 그 바로 위가 노을이다 */}
+              <div className="absolute inset-x-0 top-0 h-[62%] bg-gradient-to-b from-indigo-950 via-purple-800 to-amber-300" />
+
+              {/* 별. 노을 쪽으로 갈수록 안 보인다 */}
+              {STARS.map((s) => (
+                <span
+                  key={`${s.left}-${s.top}`}
+                  className="absolute animate-pulse rounded-full bg-white/70"
+                  style={{
+                    left: `${s.left}%`,
+                    top: `${s.top}%`,
+                    width: s.size,
+                    height: s.size,
+                    animationDelay: `${s.delay}ms`,
+                    ...shift(2),
+                  }}
+                />
+              ))}
+
+              {/* 해. 산 사이에서 지평선에 절반쯤 잠겨 있다 */}
+              <div
+                className="absolute bottom-[28%] left-[34%] h-44 w-44 -translate-x-1/2 rounded-full bg-orange-400/60 blur-3xl"
+                style={shift(4)}
+              />
+              <div
+                className="absolute bottom-[34%] left-[34%] h-14 w-14 -translate-x-1/2 rounded-full bg-amber-50 blur-[2px]"
+                style={shift(4)}
+              />
+
+              {/* 먼 산. 노을보다 어둡고, 해를 가리지 않을 만큼만 비켜 있다 */}
+              <div
+                className="absolute -left-[12%] bottom-[38%] h-[20%] w-[40%] rounded-t-[100%] bg-purple-950/60"
+                style={shift(7)}
+              />
+              <div
+                className="absolute left-[42%] bottom-[38%] h-[17%] w-[70%] rounded-t-[100%] bg-purple-950/75"
+                style={shift(9)}
+              />
+
+              {/* 폐허가 된 성. 탑 여섯 개 중 두 개만 온전하다 */}
+              <div className="absolute inset-0" style={shift(13)}>
+                {TOWERS.map((t) => (
+                  <div
+                    key={t.left}
+                    className={`absolute bottom-[38%] bg-slate-950 ${t.round}`}
+                    style={{
+                      left: `${t.left}%`,
+                      width: `${t.width}%`,
+                      height: `${t.height}%`,
+                    }}
+                  />
+                ))}
+                {/* 성벽. 가운데가 무너져서 두 토막이다 */}
+                <div className="absolute bottom-[38%] left-[49%] h-[6%] w-[11%] bg-slate-950" />
+                <div className="absolute bottom-[38%] left-[63%] h-[5%] w-[13%] bg-slate-950" />
+                {/* 아직 불이 켜진 창 두 개 */}
+                <span className="absolute bottom-[58%] left-[55%] h-1.5 w-1.5 animate-pulse rounded-sm bg-amber-300" />
+                <span
+                  className="absolute bottom-[50%] left-[65.5%] h-1.5 w-1.5 animate-pulse rounded-sm bg-amber-200"
+                  style={{ animationDelay: "900ms" }}
+                />
+              </div>
+
+              {/* 정원. 지평선 쪽은 노을을 조금 받는다 */}
+              <div
+                className="absolute inset-x-0 bottom-0 h-[38%] bg-gradient-to-b from-purple-900 via-slate-900 to-slate-900"
+                style={shift(18)}
+              />
+
+              {/* 손질하다 만 산울타리 두 줄 */}
+              <div
+                className="absolute bottom-[16%] -left-[4%] h-[4%] w-[46%] rounded-full bg-slate-950"
+                style={shift(20)}
+              />
+              <div
+                className="absolute bottom-[9%] left-[54%] h-[5%] w-[58%] rounded-full bg-slate-950"
+                style={shift(24)}
+              />
+
+              {/* 떠다니는 빛 */}
+              {MOTES.map((m) => (
+                <span
+                  key={`${m.left}-${m.top}`}
+                  className="absolute h-1 w-1 animate-pulse rounded-full bg-amber-200/80"
+                  style={{
+                    left: `${m.left}%`,
+                    top: `${m.top}%`,
+                    animationDelay: `${m.delay}ms`,
+                    animationDuration: `${m.ms}ms`,
+                    ...shift(22),
+                  }}
+                />
+              ))}
+
+              {/* 정원사. 노을을 등지고 삽을 짚고 서 있다. 이 사람도 아무것도 안 한다 */}
+              <div
+                className="absolute bottom-[32%] left-[27%] h-[15%] w-[2.4%]"
+                style={shift(26)}
+              >
+                <span className="absolute bottom-0 left-1/2 h-[60%] w-full -translate-x-1/2 rounded-t-[45%] bg-black" />
+                <span className="absolute bottom-[56%] left-1/2 h-[26%] w-[85%] -translate-x-1/2 rounded-full bg-black" />
+                <span className="absolute bottom-0 left-[150%] h-[125%] w-px bg-black" />
+                <span className="absolute bottom-[120%] left-[130%] h-px w-[70%] bg-black" />
+              </div>
+            </div>
+
+            {/* 비네트. 아래를 너무 누르면 정원사가 안 보인다 */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/30" />
+
+            {/* 로고 */}
+            <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
+              <p className="font-mono text-[10px] tracking-[0.35em] text-white/60">
+                HARU ENGINE 4.2
+              </p>
+              <h2 className="mt-2 text-2xl font-bold leading-[1.15] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] sm:text-3xl">
+                몰락한 왕국의
+                <br />
+                마지막 정원사
+              </h2>
+              <p className="mt-2 text-xs text-white/70">
+                오픈월드 액션 RPG · 2026년 하계 최대 기대작
+              </p>
+            </div>
+
+            <span className="absolute right-4 top-4 rounded border border-white/25 bg-black/30 px-2 py-1 font-mono text-[10px] tracking-widest text-white/70">
+              4K · 60FPS
+            </span>
           </div>
 
           <div className="flex flex-wrap justify-center gap-2 border-t border-foreground/10 px-6 py-5 text-xs">
@@ -337,9 +531,10 @@ export default function Game() {
 
         <button
           onClick={start}
-          className="rounded-lg bg-foreground px-10 py-4 text-lg font-bold text-background transition-opacity hover:opacity-80"
+          className="group relative rounded-lg bg-foreground px-10 py-4 text-lg font-bold text-background transition-transform hover:scale-[1.03] active:scale-100"
         >
-          게임 시작
+          <span className="absolute inset-0 animate-pulse rounded-lg bg-foreground/25 blur-md" />
+          <span className="relative">▶ 게임 시작</span>
         </button>
 
         <p className="max-w-md text-center text-xs opacity-50">

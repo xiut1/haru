@@ -11,6 +11,7 @@ import { meta as day008 } from "./only-o/meta";
 import { meta as day009 } from "./press-once/meta";
 import { meta as day010 } from "./loading-only/meta";
 import { meta as day011 } from "./guess-seconds/meta";
+import { meta as day012 } from "./unhittable-mole/meta";
 
 /** 새 게임을 만들면 여기에 meta 하나만 추가하면 된다. */
 const all: GameMeta[] = [
@@ -25,6 +26,7 @@ const all: GameMeta[] = [
   day009,
   day010,
   day011,
+  day012,
 ];
 
 /** 최신순 */

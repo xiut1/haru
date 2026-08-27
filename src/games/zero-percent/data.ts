@@ -31,16 +31,14 @@ export const RATES: { tier: Tier; rate: number }[] = [
 ];
 
 /**
- * 연출 등급. 다른 가챠들처럼 금빛·무지개·일반으로 나뉘고 색까지 그럴듯하다.
- * 결과와는 아무 상관이 없으며, 이 게임에서 확률이 0이 아닌 것은 이것뿐이다.
+ * 기둥 색은 이번 뽑기의 최고 등급을 그대로 따른다. 따로 추첨하지 않는다.
+ * ★5면 금빛, ★4면 무지개, ★3이면 회색이다.
  */
-export type Effect = "gold" | "rainbow" | "normal";
-
-export const EFFECT_RATES: { effect: Effect; rate: number; label: string }[] = [
-  { effect: "gold", rate: 0.1, label: "금빛" },
-  { effect: "rainbow", rate: 0.2, label: "무지개" },
-  { effect: "normal", rate: 0.7, label: "일반" },
-];
+export const BEAM_LABEL: Record<Tier, string> = {
+  5: "금빛",
+  4: "무지개",
+  3: "회색",
+};
 
 export const CHARS: Char[] = [
   // ★5 — 도감에 자리는 있습니다
@@ -91,14 +89,11 @@ export function rollTier(): Tier {
   return RATES[RATES.length - 1].tier;
 }
 
-export function rollEffect(): Effect {
-  const r = Math.random();
-  let acc = 0;
-  for (const row of EFFECT_RATES) {
-    acc += row.rate;
-    if (r < acc) return row.effect;
-  }
-  return "normal";
+/** 이번 뽑기의 최고 등급. 기둥 색은 이 값을 그대로 쓴다 */
+export function bestTier(got: Char[]): Tier {
+  let best: Tier = 3;
+  for (const c of got) if (c.tier > best) best = c.tier;
+  return best;
 }
 
 /** 1회 뽑기 기준 속성 분포. 풀에서 직접 센다 */

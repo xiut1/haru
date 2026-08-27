@@ -1,4 +1,4 @@
-import type { Effect, Tier } from "./data";
+import type { Tier } from "./data";
 
 /**
  * 누적 기록. 브라우저에만 남는다.
@@ -9,9 +9,13 @@ import type { Effect, Tier } from "./data";
 const KEY = "haru:zero-percent";
 
 export type Stats = {
+  /** 뽑은 카드 장수 */
   total: number;
+  /** 뽑기 횟수. 10연차는 1회로 센다 */
+  draws: number;
   byTier: Record<Tier, number>;
-  byEffect: Record<Effect, number>;
+  /** 기둥 색으로 나온 등급별 횟수 */
+  byBeam: Record<Tier, number>;
   /** 캐릭터별 보유 수 */
   owned: Record<string, number>;
   /** 중복분을 바꿔 드리는 각성 재료 */
@@ -20,8 +24,9 @@ export type Stats = {
 
 export const EMPTY: Stats = {
   total: 0,
+  draws: 0,
   byTier: { 5: 0, 4: 0, 3: 0 },
-  byEffect: { gold: 0, rainbow: 0, normal: 0 },
+  byBeam: { 5: 0, 4: 0, 3: 0 },
   owned: {},
   shards: 0,
 };
@@ -33,8 +38,9 @@ function read(): Stats {
     const parsed = JSON.parse(raw) as Partial<Stats>;
     return {
       total: parsed.total ?? 0,
+      draws: parsed.draws ?? 0,
       byTier: { ...EMPTY.byTier, ...parsed.byTier },
-      byEffect: { ...EMPTY.byEffect, ...parsed.byEffect },
+      byBeam: { ...EMPTY.byBeam, ...parsed.byBeam },
       owned: parsed.owned ?? {},
       shards: parsed.shards ?? 0,
     };

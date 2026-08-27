@@ -3,17 +3,16 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import {
+  BEAM_LABEL,
+  bestTier,
   byTier,
   CHARS,
-  EFFECT_RATES,
   ELEMENT_COLOR,
   ELEMENT_RATES,
   pull,
   RATES,
-  rollEffect,
   TIER_LABEL,
   type Char,
-  type Effect,
   type Tier,
 } from "./data";
 import {
@@ -32,9 +31,9 @@ import {
  * 뺀 것은 ★4와 ★5의 확률뿐이다. 고지된 0.000%는 과장이 아니라 실제 값이고,
  * 천장도 없다.
  *
- * 소환 연출은 다른 가챠들처럼 금빛·무지개·일반으로 나뉘고 색까지 그럴듯하지만,
- * 결과와는 독립적으로 추첨된다. 10번에 한 번은 금빛 기둥이 성실하게 솟아오르고,
- * 그리고 ★3이 나온다.
+ * 소환 기둥의 색은 다른 가챠들처럼 이번 뽑기의 최고 등급을 그대로 따른다.
+ * ★5면 금빛, ★4면 무지개, ★3이면 회색이고, 세 벌 모두 멀쩡히 구현돼 있다.
+ * 결과가 항상 ★3이라 화면에 뜨는 색은 회색뿐이다.
  *
  * 카드의 속성 표기는 속성 색으로 쓴다. 빛은 노랗고 어둠은 보랏빛이다.
  * 거짓말이 아니라 진짜 정보이며, 다만 이 게임에는 전투도 편성도 상성도 없어서
@@ -43,15 +42,9 @@ import {
 
 type Phase = "idle" | "summon" | "reveal";
 
-const EFFECT_LABEL: Record<Effect, string> = {
-  gold: "금빛",
-  rainbow: "무지개",
-  normal: "일반",
-};
-
 /** 소환 연출. 등급이 높을수록 색도 요란하고 기둥도 굵고 링도 많다 */
 const SHOW: Record<
-  Effect,
+  Tier,
   {
     ms: number;
     ray: string;
@@ -63,7 +56,7 @@ const SHOW: Record<
     glow: string;
   }
 > = {
-  normal: {
+  3: {
     ms: 1500,
     ray: "bg-[conic-gradient(from_0deg,transparent,#64748b,transparent,#cbd5e1,transparent)]",
     opacity: "opacity-20",
@@ -73,7 +66,7 @@ const SHOW: Record<
     pillar: "bg-gradient-to-t from-slate-400 via-slate-200 to-transparent",
     glow: "shadow-[0_0_70px_24px_rgba(203,213,225,0.28)]",
   },
-  rainbow: {
+  4: {
     ms: 1900,
     ray: "bg-[conic-gradient(from_0deg,#f87171,#fbbf24,#4ade80,#38bdf8,#a78bfa,#f87171)]",
     opacity: "opacity-30",
@@ -83,7 +76,7 @@ const SHOW: Record<
     pillar: "bg-gradient-to-t from-fuchsia-500 via-sky-200 to-transparent",
     glow: "shadow-[0_0_110px_36px_rgba(217,70,239,0.45)]",
   },
-  gold: {
+  5: {
     ms: 2500,
     ray: "bg-[conic-gradient(from_0deg,transparent,#fef3c7,transparent,#f59e0b,transparent,#fde68a,transparent,#fbbf24,transparent)]",
     opacity: "opacity-40",
@@ -157,7 +150,7 @@ function Card({ char, open, big }: { char: Char; open: boolean; big?: boolean })
 export default function Game() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [pulls, setPulls] = useState<Char[]>([]);
-  const [effect, setEffect] = useState<Effect>("normal");
+  const [beam, setBeam] = useState<Tier>(3);
   const [opened, setOpened] = useState(0);
   const [lit, setLit] = useState(false);
   const [summary, setSummary] = useState({ fresh: 0, dupe: 0 });
@@ -178,9 +171,9 @@ export default function Game() {
     const id = setTimeout(() => {
       setPhase("reveal");
       setOpened(0);
-    }, SHOW[effect].ms);
+    }, SHOW[beam].ms);
     return () => clearTimeout(id);
-  }, [phase, effect]);
+  }, [phase, beam]);
 
   // 한 장씩 순서대로
   useEffect(() => {
@@ -192,7 +185,7 @@ export default function Game() {
   const doPull = useCallback(
     (n: number) => {
       const got = Array.from({ length: n }, () => pull());
-      const eff = rollEffect();
+      const lit = bestTier(got);
 
       const owned = { ...stats.owned };
       const tiers = { ...stats.byTier };
@@ -212,7 +205,8 @@ export default function Game() {
       const next: Stats = {
         total: stats.total + n,
         byTier: tiers,
-        byEffect: { ...stats.byEffect, [eff]: stats.byEffect[eff] + 1 },
+        draws: stats.draws + 1,
+        byBeam: { ...stats.byBeam, [lit]: stats.byBeam[lit] + 1 },
         owned,
         shards: stats.shards + dupe,
       };
@@ -220,7 +214,7 @@ export default function Game() {
 
       setSummary({ fresh, dupe });
       setPulls(got);
-      setEffect(eff);
+      setBeam(lit);
       setOpened(0);
       setLit(false);
       setPhase("summon");
@@ -232,8 +226,7 @@ export default function Game() {
   const collected = CHARS.filter((c) => (stats.owned[c.id] ?? 0) > 0).length;
   const obs = (n: number) => (stats.total === 0 ? "—" : pct(n / stats.total));
   /** 연출은 카드 장수가 아니라 뽑기 횟수로 센다 */
-  const draws = stats.byEffect.gold + stats.byEffect.rainbow + stats.byEffect.normal;
-  const obsDraw = (n: number) => (draws === 0 ? "—" : pct(n / draws));
+  const obsDraw = (n: number) => (stats.draws === 0 ? "—" : pct(n / stats.draws));
 
   return (
     <div className="flex flex-col gap-8">
@@ -306,20 +299,24 @@ export default function Game() {
           천장(확정 보장) 없음 · 픽업 없음 · 교환소 없음
         </p>
 
-        <h3 className="mb-2 mt-5 font-bold">연출 등급</h3>
+        <h3 className="mb-2 mt-5 font-bold">기둥 색</h3>
         <table className="w-full font-mono text-xs">
           <tbody>
-            {EFFECT_RATES.map((r) => (
-              <tr key={r.effect} className="border-b border-foreground/10">
-                <td className="py-1.5 opacity-70">{r.label}</td>
+            {RATES.map((r) => (
+              <tr key={r.tier} className="border-b border-foreground/10">
+                <td className="py-1.5 opacity-70">
+                  {BEAM_LABEL[r.tier]}{" "}
+                  <span className={TIER_TEXT[r.tier]}>{TIER_LABEL[r.tier]}</span>
+                </td>
                 <td className="py-1.5 text-right tabular-nums">{pct(r.rate)}</td>
               </tr>
             ))}
           </tbody>
         </table>
         <p className="mt-2 text-xs leading-relaxed opacity-60">
-          연출 등급은 결과와 독립적으로 추첨됩니다. 금빛 기둥이 솟아오르더라도
-          결과는 위 확률표를 따릅니다. 이 게임에서 0이 아닌 확률은 이 표뿐입니다.
+          기둥 색은 따로 추첨하지 않고 이번 뽑기의 최고 등급을 그대로 따릅니다.
+          그래서 위 확률은 결과 확률과 같은 값입니다. 금빛과 무지개 기둥도 멀쩡히
+          준비돼 있으나, 결과가 항상 ★★★이므로 실제로 뜨는 색은 회색뿐입니다.
         </p>
 
         <h3 className="mb-2 mt-5 font-bold">속성 분포</h3>
@@ -373,12 +370,20 @@ export default function Game() {
               </tr>
             ))}
             <tr className="border-b border-foreground/10">
-              <td className="py-1.5 opacity-70">금빛 연출</td>
+              <td className="py-1.5 opacity-70">뽑기 횟수</td>
               <td className="py-1.5 text-right tabular-nums">
-                {stats.byEffect.gold.toLocaleString()}회 / {draws.toLocaleString()}뽑기{" "}
-                <span className="opacity-50">(관측 {obsDraw(stats.byEffect.gold)})</span>
+                {stats.draws.toLocaleString()}회
               </td>
             </tr>
+            {RATES.map((r) => (
+              <tr key={`beam-${r.tier}`} className="border-b border-foreground/10">
+                <td className="py-1.5 opacity-70">{BEAM_LABEL[r.tier]} 기둥</td>
+                <td className="py-1.5 text-right tabular-nums">
+                  {stats.byBeam[r.tier].toLocaleString()}회{" "}
+                  <span className="opacity-50">(관측 {obsDraw(stats.byBeam[r.tier])})</span>
+                </td>
+              </tr>
+            ))}
             <tr className="border-b border-foreground/10">
               <td className="py-1.5 opacity-70">각성 재료</td>
               <td className="py-1.5 text-right tabular-nums">
@@ -461,15 +466,15 @@ export default function Game() {
               aria-label="연출 건너뛰기"
             >
               <div
-                className={`absolute size-[200vmax] animate-spin rounded-full ${SHOW[effect].ray} ${SHOW[effect].opacity}`}
-                style={{ animationDuration: SHOW[effect].spin }}
+                className={`absolute size-[200vmax] animate-spin rounded-full ${SHOW[beam].ray} ${SHOW[beam].opacity}`}
+                style={{ animationDuration: SHOW[beam].spin }}
               />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,0,0,0.8)_0%,rgba(0,0,0,0.35)_45%,transparent_75%)]" />
               <div
-                className={`absolute bottom-0 h-full origin-bottom transition-transform duration-1000 ease-out ${SHOW[effect].width} ${SHOW[effect].pillar} ${SHOW[effect].glow}`}
+                className={`absolute bottom-0 h-full origin-bottom transition-transform duration-1000 ease-out ${SHOW[beam].width} ${SHOW[beam].pillar} ${SHOW[beam].glow}`}
                 style={{ transform: lit ? "scaleY(1)" : "scaleY(0)" }}
               />
-              {Array.from({ length: SHOW[effect].rings }, (_, i) => (
+              {Array.from({ length: SHOW[beam].rings }, (_, i) => (
                 <div
                   key={i}
                   className="absolute animate-ping rounded-full border-2 border-white/40"
@@ -484,7 +489,7 @@ export default function Game() {
                 SUMMONING
               </p>
               <p className="absolute bottom-10 font-mono text-[10px] tracking-widest text-white/45 drop-shadow-[0_0_6px_rgba(0,0,0,0.9)]">
-연출 등급 {EFFECT_LABEL[effect]} · 탭하면 건너뜁니다
+{BEAM_LABEL[beam]} 기둥 · 탭하면 건너뜁니다
               </p>
             </button>
           )}
@@ -492,7 +497,7 @@ export default function Game() {
           {phase === "reveal" && (
             <div className="flex w-full max-w-lg flex-col items-center gap-5 px-5">
               <p className="font-mono text-[10px] tracking-[0.3em] text-white/40">
-                연출 등급 {EFFECT_LABEL[effect]}
+                {BEAM_LABEL[beam]} 기둥 · 최고 등급 {TIER_LABEL[beam]}
               </p>
 
               <div

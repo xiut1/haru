@@ -5,20 +5,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 /**
  * 사다리 타기 규칙은 전부 지킨다. 세로줄 위에서 출발해 한 행씩 내려가면서
  * 왼쪽 가로선이 있으면 왼쪽으로, 오른쪽에 있으면 오른쪽으로 건너간다.
- * 가로선 생성기도 원본 규칙(같은 행에서 가로선끼리 붙지 않게)을 지킨다.
+ * 가로선 생성기도 원본 규칙(같은 행에서 가로선끼리 붙지 않게)을 지키고,
+ * 밀도도 원본이 쓰는 값 그대로다. 사다리는 진짜로 잘 굴러간다.
  *
- * 뺀 것은 가로선 밀도 하나뿐이다. 미리보기는 PREVIEW_DENSITY로 성실하게
- * 계속 다시 뽑아서 진짜 사다리처럼 보이지만, 시작을 누르는 순간 확정되는
- * 사다리는 RUNG_DENSITY로 뽑는다. 그 값이 0이라 가로선이 한 개도 안 남는다.
- * 그래서 경로는 항상 항등 사상이고, 결과는 고르기 전에 이미 읽을 수 있다.
+ * 딱 하나 「첫 주자 우대 규정」이 붙어 있다. 가로선은 첫 주자가 정해진
+ * 뒤에 놓이고, 그때 첫 주자가 선 세로줄에 닿는 간격은 전부 건너뛴다.
+ * 그래서 첫 주자는 28행을 직진해 고른 자리 바로 밑으로 떨어지고,
+ * 두 번째 분부터는 멀쩡히 섞인다. 사다리가 고장 난 게 아니라는 게 매번
+ * 눈앞에서 증명된다.
  */
 const ROWS = 28;
 
-/** 확정 사다리의 가로선 밀도. 원본 사다리는 0.35쯤 쓴다. */
-const RUNG_DENSITY = 0;
-
-/** 가림막 안에서 굴러가는 미리보기 밀도. 이쪽은 진짜로 뽑힌다. */
-const PREVIEW_DENSITY = 0.14;
+/** 가로선 밀도. 미리보기와 확정에 같은 값을 쓴다. */
+const RUNG_DENSITY = 0.3;
 
 /** 한 행 내려가는 데 걸리는 시간 */
 const STEP_MS = 38;
@@ -26,6 +25,10 @@ const STEP_MS = 38;
 const PREVIEW_MS = 260;
 /** 가림막이 걷히는 데 걸리는 시간 */
 const REVEAL_MS = 800;
+/** 가로선이 위에서부터 다 그어지는 데 걸리는 시간 */
+const PLACE_MS = 880;
+/** 가로선 한 줄이 그어지는 간격 */
+const PLACE_STAGGER = 18;
 
 const MIN_COLS = 2;
 const MAX_COLS = 8;
@@ -39,12 +42,16 @@ type Rungs = boolean[][];
 /**
  * 가로선을 뽑는다. 같은 행에서 가로선이 연달아 붙으면 경로가 갈라지므로
  * 원본 규칙대로 바로 왼쪽 간격이 이미 찼으면 건너뛴다.
+ *
+ * protect는 첫 주자가 선 세로줄이다. 규정상 그 줄에 닿는 간격에는
+ * 가로선을 놓지 않는다.
  */
-function generateRungs(cols: number, density: number): Rungs {
+function generateRungs(cols: number, density: number, protect = -1): Rungs {
   const rungs: Rungs = [];
   for (let r = 0; r < ROWS; r++) {
     const row = Array<boolean>(cols - 1).fill(false);
     for (let g = 0; g < row.length; g++) {
+      if (g === protect - 1 || g === protect) continue;
       if (g > 0 && row[g - 1]) continue;
       if (Math.random() < density) row[g] = true;
     }
@@ -120,15 +127,29 @@ function logLine(index: number, step: Step): string {
   return `${String(index + 1).padStart(2, "0")}행  ${left} · ${right} → ${dir}`;
 }
 
-function verdict(plays: number, name: string, prize: string, win: boolean): string {
-  if (win && plays === 1) return `축하합니다. 당첨 자리를 직접 고르셨습니다.`;
-  if (win) return `또 당첨입니다. 당첨 자리를 누르면 당첨이 나옵니다.`;
-  if (plays >= 8) return `${plays}번째입니다. 사다리는 아주 잘 작동하고 있습니다.`;
-  if (plays >= 5) return `${plays}번째입니다. 이제 그냥 아래를 보고 고르시죠.`;
-  if (plays === 4) return "네 번 다 직진했습니다. 뭔가 눈치채셨을 텐데요.";
-  if (plays === 3) return "세 번째도 고른 자리 그대로입니다.";
-  if (plays === 2) return "두 번째도 바로 밑으로 떨어졌습니다.";
-  return `${name} 바로 아래에 있던 「${prize}」입니다. 놀라셨습니까.`;
+function verdict(
+  name: string,
+  crossed: number,
+  win: boolean,
+  first: boolean,
+  plays: number,
+): string {
+  if (first && win) {
+    return `${name}님은 당첨 자리 바로 위를 고르셨고, 규정대로 직진하셨습니다.`;
+  }
+  if (first && plays === 1) {
+    return `규정에 따라 ${name}님 코스에는 가로선을 놓지 않았습니다. 28행 전부 직진입니다.`;
+  }
+  if (first) {
+    return `${name}님은 첫 주자입니다. 몇 번을 타셔도 직진입니다.`;
+  }
+  if (win) {
+    return `${crossed}칸 건너서 당첨까지 가셨습니다. 사다리는 이렇게 작동합니다.`;
+  }
+  if (crossed === 0) {
+    return `${name}님은 한 칸도 못 건너셨습니다. 첫 주자 옆이라 놓인 가로선이 없습니다.`;
+  }
+  return `${name}님은 ${crossed}칸 움직이셨습니다. 사다리는 멀쩡합니다. 첫 주자만 예외입니다.`;
 }
 
 export default function Game() {
@@ -141,8 +162,13 @@ export default function Game() {
   const [started, setStarted] = useState(false);
   const [revealing, setRevealing] = useState(false);
 
-  /** 시작을 누르는 순간 확정되는 진짜 사다리 */
-  const [rungs, setRungs] = useState<Rungs>(() => generateRungs(MAX_COLS, RUNG_DENSITY));
+  /** 첫 주자가 정해진 뒤에 놓이는 진짜 사다리. 그전에는 아직 없다. */
+  const [rungs, setRungs] = useState<Rungs | null>(null);
+  const [firstPick, setFirstPick] = useState<number | null>(null);
+  /** 가로선을 놓는 중. 다 그어질 때까지 아무도 안 내려간다. */
+  const [placing, setPlacing] = useState(false);
+  const [drawn, setDrawn] = useState(false);
+
   /** 가림막 안에서 계속 다시 뽑히는 미리보기. 서버와 어긋나지 않게 빈 판에서 시작한다. */
   const [preview, setPreview] = useState<Rungs>(() => emptyRungs(MAX_COLS));
 
@@ -153,15 +179,16 @@ export default function Game() {
   const logRef = useRef<HTMLDivElement>(null);
 
   const steps = useMemo(
-    () => (picked === null ? null : walk(rungs, picked)),
+    () => (picked === null || rungs === null ? null : walk(rungs, picked)),
     [rungs, picked],
   );
 
-  const running = started && steps !== null && row < ROWS;
-  const done = started && steps !== null && row >= ROWS;
+  const running = started && !placing && steps !== null && row < ROWS;
+  const done = started && !placing && steps !== null && row >= ROWS;
   const current = steps ? (row === 0 ? steps[0].from : steps[row - 1].to) : null;
   const crossed = steps ? steps.slice(0, row).filter((s) => s.move !== 0).length : 0;
-  const locked = started || running;
+  const busy = revealing || placing || running;
+  const locked = started;
 
   // 한 행씩 내려간다. 연출이 아니라 실제로 경로를 한 칸씩 따라간다.
   useEffect(() => {
@@ -174,7 +201,7 @@ export default function Game() {
   useEffect(() => {
     if (started) return;
     const id = setInterval(
-      () => setPreview(generateRungs(MAX_COLS, PREVIEW_DENSITY)),
+      () => setPreview(generateRungs(MAX_COLS, RUNG_DENSITY)),
       PREVIEW_MS,
     );
     return () => clearInterval(id);
@@ -187,22 +214,41 @@ export default function Game() {
     return () => clearTimeout(id);
   }, [revealing]);
 
+  // 가로선을 위에서부터 한 줄씩 긋고, 다 그어지면 출발시킨다.
+  useEffect(() => {
+    if (!placing) return;
+    const draw = setTimeout(() => setDrawn(true), 30);
+    const go = setTimeout(() => setPlacing(false), PLACE_MS);
+    return () => {
+      clearTimeout(draw);
+      clearTimeout(go);
+    };
+  }, [placing]);
+
   useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [row]);
 
   function start() {
-    // 여기서 진짜 사다리가 확정된다. 밀도만 다를 뿐 뽑는 방식은 미리보기와 같다.
-    setRungs(generateRungs(MAX_COLS, RUNG_DENSITY));
     setStarted(true);
     setRevealing(true);
+    setRungs(null);
+    setFirstPick(null);
     setPicked(null);
     setRow(0);
+    setPlays(0);
   }
 
   function pick(c: number) {
-    if (!started || revealing || running) return;
+    if (!started || busy) return;
+    if (rungs === null) {
+      // 첫 주자가 정해졌다. 이제 가로선을 놓는다. c에 닿는 간격만 빼고.
+      setRungs(generateRungs(cols, RUNG_DENSITY, c));
+      setFirstPick(c);
+      setDrawn(false);
+      setPlacing(true);
+    }
     setPicked(c);
     setRow(0);
     setPlays((p) => p + 1);
@@ -216,6 +262,10 @@ export default function Game() {
   function reset() {
     setStarted(false);
     setRevealing(false);
+    setRungs(null);
+    setFirstPick(null);
+    setPlacing(false);
+    setDrawn(false);
     setPicked(null);
     setRow(0);
   }
@@ -246,13 +296,16 @@ export default function Game() {
   }
 
   const seats = Array.from({ length: cols }, (_, i) => i);
+  const placed = rungs ? countRungs(rungs, cols) : 0;
 
   return (
     <div className="flex w-full flex-col items-center gap-6">
       <p className="text-center text-sm opacity-70">
-        {started
-          ? "참가자를 누르면 확정된 사다리를 타고 내려갑니다."
-          : "참가자와 결과를 적고 시작을 누르십시오. 가림막이 걷히면 사다리가 확정됩니다."}
+        {!started
+          ? "참가자와 결과를 적고 시작을 누르십시오. 가림막이 걷히면 사다리가 확정됩니다."
+          : rungs === null
+            ? "첫 번째로 고르시는 분께는 규정상 방해 없는 직선 코스가 배정됩니다."
+            : "가로선은 이미 놓였습니다. 두 번째 분부터는 정상적으로 섞입니다."}
       </p>
 
       {/* 설정 */}
@@ -297,11 +350,13 @@ export default function Game() {
               <button
                 key={c}
                 onClick={() => pick(c)}
-                disabled={revealing || running}
+                disabled={busy}
                 className={`min-w-0 flex-1 truncate rounded-lg border px-1 py-2 text-center text-sm font-bold transition-all ${
                   picked === c
                     ? "border-emerald-500 bg-emerald-500/15 shadow-[0_0_18px_-6px_rgb(16_185_129)]"
-                    : "border-foreground/15 enabled:hover:-translate-y-0.5 enabled:hover:border-foreground/40 enabled:hover:bg-foreground/5"
+                    : firstPick === c
+                      ? "border-foreground/40 bg-foreground/5"
+                      : "border-foreground/15 enabled:hover:-translate-y-0.5 enabled:hover:border-foreground/40 enabled:hover:bg-foreground/5"
                 } disabled:opacity-60`}
               >
                 {names[c] || "?"}
@@ -321,7 +376,7 @@ export default function Game() {
 
         {/* 판 */}
         <div className="relative mt-2 h-[clamp(220px,42vh,320px)] overflow-hidden rounded-lg bg-foreground/[0.03]">
-          {/* 확정된 세로줄. 가림막이 걷히면 위에서부터 자라난다. */}
+          {/* 세로줄. 가림막이 걷히면 위에서부터 자라난다. */}
           {seats.map((c) => (
             <div
               key={c}
@@ -334,49 +389,60 @@ export default function Game() {
             />
           ))}
 
-          {/* 확정된 가로선. 생성기가 뽑아낸 만큼 그린다. */}
-          {rungs.flatMap((line, r) =>
+          {/* 첫 주자 코스. 가로선이 하나도 안 붙는 구간이다. */}
+          {firstPick !== null && (
+            <div
+              className="absolute bottom-0 top-0 w-[3px] -translate-x-1/2 bg-foreground/10"
+              style={{ left: colLeft(firstPick, cols) }}
+            />
+          )}
+
+          {/* 놓인 가로선. 위에서부터 한 줄씩 그어진다. */}
+          {rungs?.flatMap((line, r) =>
             line.slice(0, cols - 1).map((on, g) =>
               on ? (
                 <div
                   key={`${r}-${g}`}
-                  className="absolute h-px -translate-y-1/2 bg-foreground/40"
+                  className="absolute h-px origin-left -translate-y-1/2 bg-foreground/45 transition-transform duration-300 ease-out"
                   style={{
                     top: `${rowTop(r)}%`,
                     left: colLeft(g, cols),
                     width: colSpan(cols),
+                    transform: drawn ? "scaleX(1)" : "scaleX(0)",
+                    transitionDelay: `${r * PLACE_STAGGER}ms`,
                   }}
                 />
               ) : null,
             ),
           )}
 
-          {/* 지나온 경로. 가로선을 탔다면 꺾인 자국이 남는다. */}
-          {steps?.slice(0, row).map((step, r) => (
-            <div key={r}>
-              {step.move !== 0 && (
+          {/* 지나온 경로. 가로선을 탔으면 꺾인 자국이 남는다. */}
+          {!placing &&
+            steps?.slice(0, row).map((step, r) => (
+              <div key={r}>
+                {step.move !== 0 && (
+                  <div
+                    className="absolute h-[3px] -translate-y-1/2 rounded-full bg-emerald-500"
+                    style={{
+                      top: `${rowTop(r)}%`,
+                      left: colLeft(Math.min(step.from, step.to), cols),
+                      width: colSpan(cols),
+                    }}
+                  />
+                )}
                 <div
-                  className="absolute h-[3px] -translate-y-1/2 rounded-full bg-emerald-500"
+                  className="absolute w-[3px] -translate-x-1/2 rounded-full bg-emerald-500 shadow-[0_0_10px_-2px_rgb(16_185_129)]"
                   style={{
-                    top: `${rowTop(r)}%`,
-                    left: colLeft(Math.min(step.from, step.to), cols),
-                    width: colSpan(cols),
+                    top: r === 0 ? "0%" : `${rowTop(r)}%`,
+                    left: colLeft(step.to, cols),
+                    height: `${(r === 0 ? PAD + ROW_H : ROW_H) + 0.4}%`,
                   }}
                 />
-              )}
-              <div
-                className="absolute w-[3px] -translate-x-1/2 rounded-full bg-emerald-500 shadow-[0_0_10px_-2px_rgb(16_185_129)]"
-                style={{
-                  top: r === 0 ? "0%" : `${rowTop(r)}%`,
-                  left: colLeft(step.to, cols),
-                  height: `${(r === 0 ? PAD + ROW_H : ROW_H) + 0.4}%`,
-                }}
-              />
-            </div>
-          ))}
+              </div>
+            ))}
 
           {/* 지금 위치 */}
-          {started && current !== null && (
+          {started && !placing && current !== null && (
             <div
               className="absolute -translate-x-1/2 -translate-y-1/2 ease-linear transition-[top,left] duration-[38ms]"
               style={{ top: `${rowTop(row)}%`, left: colLeft(current, cols) }}
@@ -501,31 +567,33 @@ export default function Game() {
       <dl className="grid w-full grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3 lg:grid-cols-6">
         <div>
           <dt className="text-xs opacity-60">상태</dt>
-          <dd className="font-bold">{started ? "확정됨" : "섞는 중"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs opacity-60">미리보기 가로선</dt>
-          <dd className="font-bold tabular-nums">
-            {started ? "—" : `${countRungs(preview, cols)}개`}
+          <dd className="font-bold">
+            {!started ? "섞는 중" : rungs === null ? "첫 주자 대기" : "확정됨"}
           </dd>
         </div>
         <div>
-          <dt className="text-xs opacity-60">확정된 가로선</dt>
-          <dd className="font-bold tabular-nums">
-            {started ? `${countRungs(rungs, cols)}개` : "—"}
+          <dt className="text-xs opacity-60">첫 주자</dt>
+          <dd className="truncate font-bold">
+            {firstPick === null ? "—" : names[firstPick] || "?"}
           </dd>
         </div>
         <div>
-          <dt className="text-xs opacity-60">사다리 높이</dt>
-          <dd className="font-bold tabular-nums">{ROWS}행</dd>
+          <dt className="text-xs opacity-60">놓인 가로선</dt>
+          <dd className="font-bold tabular-nums">{rungs ? `${placed}개` : "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs opacity-60">우대 구간</dt>
+          <dd className="font-bold tabular-nums">
+            {firstPick === null ? "—" : `${ROWS}행`}
+          </dd>
         </div>
         <div>
           <dt className="text-xs opacity-60">검사한 교차점</dt>
-          <dd className="font-bold tabular-nums">{row * 2}개</dd>
+          <dd className="font-bold tabular-nums">{placing ? 0 : row * 2}개</dd>
         </div>
         <div>
           <dt className="text-xs opacity-60">좌우 이동</dt>
-          <dd className="font-bold tabular-nums">{crossed}칸</dd>
+          <dd className="font-bold tabular-nums">{placing ? 0 : crossed}칸</dd>
         </div>
       </dl>
 
@@ -535,7 +603,9 @@ export default function Game() {
           ref={logRef}
           className="h-24 w-full overflow-y-auto rounded-lg border border-foreground/15 bg-foreground/[0.03] p-3 font-mono text-[11px] leading-5 opacity-70"
         >
-          {steps === null ? (
+          {placing ? (
+            <p className="opacity-60">가로선을 놓는 중입니다. 첫 주자 코스는 비웁니다.</p>
+          ) : steps === null ? (
             <p className="opacity-60">추적 대기 중입니다. 참가자를 고르십시오.</p>
           ) : (
             steps.slice(0, row).map((step, r) => <p key={r}>{logLine(r, step)}</p>)
@@ -552,16 +622,30 @@ export default function Game() {
               {prizes[current] || "—"}
             </p>
             <p className="mt-1 text-sm opacity-60">
-              {verdict(plays, names[picked] || "?", prizes[current] || "—", winner === current)}
+              {verdict(
+                names[picked] || "?",
+                crossed,
+                winner === current,
+                picked === firstPick,
+                plays,
+              )}
             </p>
           </>
+        ) : placing ? (
+          <p className="text-sm opacity-60">
+            가로선을 놓는 중입니다. 첫 주자 코스만 비워 둡니다…
+          </p>
         ) : running ? (
           <p className="text-sm opacity-60">가로선을 확인하며 내려가는 중입니다…</p>
         ) : revealing ? (
-          <p className="text-sm opacity-60">가로선을 확정하는 중입니다…</p>
+          <p className="text-sm opacity-60">가림막을 걷는 중입니다…</p>
+        ) : started && rungs === null ? (
+          <p className="text-sm opacity-60">
+            가로선은 첫 주자가 정해진 뒤에 놓입니다. 첫 주자를 고르십시오.
+          </p>
         ) : started ? (
           <p className="text-sm opacity-60">
-            가로선 {countRungs(rungs, cols)}개로 확정됐습니다. 참가자를 고르십시오.
+            가로선 {placed}개가 놓여 있습니다. 다음 분을 고르십시오.
           </p>
         ) : (
           <p className="text-sm opacity-60">
@@ -583,14 +667,14 @@ export default function Game() {
           <>
             <button
               onClick={again}
-              disabled={running || picked === null}
+              disabled={busy || picked === null}
               className="rounded-full border border-foreground/20 px-6 py-3 text-sm transition-all enabled:hover:-translate-y-0.5 enabled:hover:bg-foreground/10 disabled:opacity-40"
             >
-              다른 참가자 고르기
+              다음 사람 고르기
             </button>
             <button
               onClick={reset}
-              disabled={running}
+              disabled={busy}
               className="rounded-full border border-foreground/20 px-6 py-3 text-sm transition-all enabled:hover:-translate-y-0.5 enabled:hover:bg-foreground/10 disabled:opacity-40"
             >
               처음부터
@@ -600,9 +684,10 @@ export default function Game() {
       </div>
 
       <p className="max-w-md text-center text-xs opacity-50">
-        가림막 안의 미리보기는 밀도 {PREVIEW_DENSITY.toFixed(2)}로 {PREVIEW_MS}밀리초마다
-        다시 뽑습니다. 시작을 누르면 같은 생성기가 밀도 {RUNG_DENSITY.toFixed(2)}로 한 번
-        더 돌아가고, 그때 확정된 사다리가 끝까지 쓰입니다.
+        가로선 생성기는 밀도 {RUNG_DENSITY.toFixed(2)}으로 {ROWS}개 행 × {cols - 1}개
+        간격을 전부 돌립니다. 첫 주자로 지목된 세로줄에 닿는 간격만 건너뜁니다. 그래서
+        그 줄에는 가로선이 하나도 안 붙고, 사다리는 그 줄을 기준으로 좌우가 완전히
+        갈립니다. 규정의 부작용입니다.
       </p>
     </div>
   );

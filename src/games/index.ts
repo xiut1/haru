@@ -16,7 +16,7 @@ import { meta as day013 } from "./empty-lake/meta";
 import { meta as day014 } from "./one-pixel-short/meta";
 import { meta as day015 } from "./zero-percent/meta";
 import { meta as day016 } from "./bb-duck-hunt/meta";
-import { meta as day017 } from "./straight-ladder/meta";
+import { meta as day017 } from "./first-runner-ladder/meta";
 
 /** 새 게임을 만들면 여기에 meta 하나만 추가하면 된다. */
 const all: GameMeta[] = [

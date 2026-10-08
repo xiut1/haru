@@ -24,4 +24,5 @@ export const gameComponents: Record<string, ComponentType> = {
   "bb-duck-hunt": dynamic(() => import("./bb-duck-hunt/Game")),
   "first-runner-ladder": dynamic(() => import("./first-runner-ladder/Game")),
   "cornered-sokoban": dynamic(() => import("./cornered-sokoban/Game")),
+  "wrong-piece-jigsaw": dynamic(() => import("./wrong-piece-jigsaw/Game")),
 };

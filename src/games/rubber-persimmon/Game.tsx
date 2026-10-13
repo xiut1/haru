@@ -129,6 +129,11 @@ export default function Game() {
   const seasonRef = useRef(0);
   const recRef = useRef<Crop>(FRESH);
   const droppedInGrab = useRef(false);
+  /** 지금 나무를 잡고 있는 포인터. 두 번째 손가락은 무시한다. */
+  const grabPointer = useRef<number | null>(null);
+  const releaseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => () => clearTimeout(releaseTimer.current), []);
 
   const raw = useSyncExternalStore(subscribe, readSnapshot, serverSnapshot);
   const ready = raw !== PENDING;
@@ -183,11 +188,8 @@ export default function Game() {
       const rec = recRef.current;
       if (!simRef.current || seasonRef.current !== rec.season) {
         const prev = simRef.current;
-        simRef.current = createSim(rec.left);
-        if (prev) {
-          simRef.current.theta = prev.theta;
-          simRef.current.omega = prev.omega;
-        }
+        simRef.current = createSim(rec.left, prev ?? undefined);
+        if (prev) simRef.current.grab = prev.grab;
         seasonRef.current = rec.season;
       }
       const sim = simRef.current;
@@ -261,12 +263,14 @@ export default function Game() {
 
   function down(e: ReactPointerEvent<HTMLCanvasElement>) {
     const sim = simRef.current;
-    if (!sim) return;
+    if (!sim || !e.isPrimary || grabPointer.current !== null) return;
     const p = local(e);
     const hit = pick(sim, p.x, p.y);
     if (!hit) return;
     e.currentTarget.setPointerCapture(e.pointerId);
+    grabPointer.current = e.pointerId;
     sim.grab = { ...hit, target: p };
+    clearTimeout(releaseTimer.current);
     droppedInGrab.current = false;
     const cur = recRef.current;
     commit({ ...cur, shakes: cur.shakes + 1 });
@@ -277,20 +281,23 @@ export default function Game() {
     const sim = simRef.current;
     if (!sim) return;
     const p = local(e);
-    if (sim.grab) {
-      sim.grab.target = p;
+    if (grabPointer.current !== null) {
+      if (e.pointerId === grabPointer.current && sim.grab) sim.grab.target = p;
       return;
     }
     e.currentTarget.style.cursor = pick(sim, p.x, p.y) ? "grab" : "default";
   }
 
   function up(e: ReactPointerEvent<HTMLCanvasElement>) {
+    if (e.pointerId !== grabPointer.current) return;
+    grabPointer.current = null;
     const sim = simRef.current;
     if (!sim?.grab) return;
     sim.grab = null;
     e.currentTarget.style.cursor = "grab";
     // 놓는 순간 튕겨서 떨어지는 경우가 많으니 조금 기다렸다가 판정한다.
-    setTimeout(() => {
+    // 그 사이에 다시 잡으면 이 판정은 취소된다.
+    releaseTimer.current = setTimeout(() => {
       if (!droppedInGrab.current) setMessage(releaseText(recRef.current));
     }, 900);
   }

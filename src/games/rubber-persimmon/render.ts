@@ -17,6 +17,20 @@ const LEAVES: { branch: number; t: number; dx: number; dy: number; r: number; c:
   { branch: 6, t: 0.5, dx: -12, dy: -2, r: 12, c: "#6aa64a" },
 ];
 
+/**
+ * 고정 갈색을 전경색 쪽으로 당긴다. 전경색이 밝을수록(다크모드) 많이 당겨서
+ * 어두운 배경에 가지와 꼭지가 묻히지 않게 한다. 라이트모드에서는 거의 그대로다.
+ */
+function tint(hex: string, ink: string, max: number): string {
+  const m = ink.match(/\d+(\.\d+)?/g);
+  if (!m || m.length < 3) return hex;
+  const [ir, ig, ib] = m.slice(0, 3).map(Number);
+  const t = max * ((0.2126 * ir + 0.7152 * ig + 0.0722 * ib) / 255);
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c: number, i: number) => Math.round(c + (i - c) * t);
+  return `rgb(${mix(n >> 16, ir)}, ${mix((n >> 8) & 255, ig)}, ${mix(n & 255, ib)})`;
+}
+
 function persimmon(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number, r = FRUIT_R) {
   ctx.save();
   ctx.translate(x, y);
@@ -68,7 +82,7 @@ export function draw(ctx: CanvasRenderingContext2D, sim: Sim, ink: string, bud: 
 
   // 가지
   ctx.lineCap = "round";
-  ctx.strokeStyle = "#6b4528";
+  ctx.strokeStyle = tint("#6b4528", ink, 0.4);
   sim.segs.forEach((s, i) => {
     ctx.lineWidth = BRANCHES[i].width;
     ctx.beginPath();
@@ -105,6 +119,7 @@ export function draw(ctx: CanvasRenderingContext2D, sim: Sim, ink: string, bud: 
   }
 
   // 감
+  const stem = tint("#4b3a22", ink, 0.5);
   sim.fruits.forEach((f, id) => {
     if (f.state === "gone") return;
     if (f.state === "hang") {
@@ -113,7 +128,7 @@ export function draw(ctx: CanvasRenderingContext2D, sim: Sim, ink: string, bud: 
       const dy = f.p.y - a.y;
       const d = Math.hypot(dx, dy) || 1;
       const top = d - FRUIT_R * 0.8;
-      ctx.strokeStyle = "#4b3a22";
+      ctx.strokeStyle = stem;
       ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);

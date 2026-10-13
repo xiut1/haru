@@ -70,6 +70,9 @@ const STEM_DAMP = 7;
 const SMOOTH = 0.1;
 /** 이 각도를 넘으면 고무가 급격히 뻣뻣해진다. 딱 멈추면 장력이 튀어서 안 된다. */
 const HARD = 1.3;
+/** HARD 너머 벽 강성(k 배수)과, 바깥으로 나가는 속도만 먹는 감쇠 (1/s) */
+const WALL = 120;
+const WALL_DAMP = 30;
 
 export type Fruit = {
   id: number;
@@ -169,12 +172,17 @@ function chain(i: number): number[] {
 }
 const CHAINS = BRANCHES.map((_, i) => chain(i));
 
-export function createSim(left: number[]): Sim {
-  const theta = BRANCHES.map(() => 0);
+/**
+ * 새 철이 열려도 나무는 흔들리던 그대로 이어서 흔들린다. 그래서 자세를 넘겨받으면
+ * 그 자세 기준으로 감을 매단다. 쉬는 자세 기준으로 매달면 첫 스텝에 꼭지가 순간이동해서
+ * 갓 열린 감이 전부 떨어진다.
+ */
+export function createSim(left: number[], from?: { theta: number[]; omega: number[] }): Sim {
+  const theta = from ? [...from.theta] : BRANCHES.map(() => 0);
   const segs = pose(theta);
   return {
     theta,
-    omega: BRANCHES.map(() => 0),
+    omega: from ? [...from.omega] : BRANCHES.map(() => 0),
     segs,
     fruits: FRUITS.map((f) => {
       if (!left.includes(f.id)) return { state: "gone" };
@@ -228,14 +236,14 @@ function stepTree(sim: Sim) {
     const parentAlpha = b.parent < 0 ? 0 : alphaWorld[b.parent];
     const over = Math.max(0, Math.abs(theta[i]) - SOFT);
     const stop = 48 * b.k * over * over * Math.sign(theta[i]);
-    const a = -b.k * theta[i] - stop - DAMP * omega[i] + drive[i] - LAG * parentAlpha;
+    // HARD 너머는 벽이지만 고무벽이다. 몇 스텝에 걸쳐 세운다.
+    const past = Math.max(0, Math.abs(theta[i]) - HARD);
+    const outward = past > 0 && omega[i] * theta[i] > 0;
+    const wall = WALL * b.k * past * Math.sign(theta[i]) + (outward ? WALL_DAMP * omega[i] : 0);
+    const a = -b.k * theta[i] - stop - wall - DAMP * omega[i] + drive[i] - LAG * parentAlpha;
     alphaWorld.push(parentAlpha + a);
     omega[i] += a * DT;
     theta[i] += omega[i] * DT;
-    if (Math.abs(theta[i]) > HARD) {
-      theta[i] = Math.sign(theta[i]) * HARD;
-      omega[i] = 0;
-    }
   });
 
   sim.segs = pose(theta);

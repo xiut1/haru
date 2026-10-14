@@ -26,4 +26,5 @@ export const gameComponents: Record<string, ComponentType> = {
   "cornered-sokoban": dynamic(() => import("./cornered-sokoban/Game")),
   "wrong-piece-jigsaw": dynamic(() => import("./wrong-piece-jigsaw/Game")),
   "rubber-persimmon": dynamic(() => import("./rubber-persimmon/Game")),
+  "almost-forged": dynamic(() => import("./almost-forged/Game")),
 };

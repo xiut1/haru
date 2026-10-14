@@ -20,6 +20,7 @@ import { meta as day017 } from "./first-runner-ladder/meta";
 import { meta as day018 } from "./cornered-sokoban/meta";
 import { meta as day019 } from "./wrong-piece-jigsaw/meta";
 import { meta as day020 } from "./rubber-persimmon/meta";
+import { meta as day021 } from "./almost-forged/meta";
 
 /** 새 게임을 만들면 여기에 meta 하나만 추가하면 된다. */
 const all: GameMeta[] = [
@@ -43,6 +44,7 @@ const all: GameMeta[] = [
   day018,
   day019,
   day020,
+  day021,
 ];
 
 /** 최신순 */
